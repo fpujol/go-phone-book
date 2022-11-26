@@ -1,60 +1,111 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
-	"path"
 )
 
 type Entry struct {
-	Name string
-	Surname string
-	Tel string
+	Name       string
+	Surname    string
+	Number     string
+	LastAccess string
 }
 
-var data = []Entry{}
+var myData = []Entry{}
+var index map[string]int
+var CSVFILE = "data.csv"
 
-func search(key string) *Entry {
-	for i,v := range data {
-		if v.Surname == key {
-			return &data[i]
+func main() {
+	if len(os.Args) == 1 {
+		fmt.Println("Usage: insert|delete|search|list <arguments>")
+		return
+	}
+
+	//if the CSVFILE does not exist, create an empty one
+	_, err := os.Stat(CSVFILE)
+	if err != nil {
+		fmt.Println("Creating", CSVFILE)
+		f, err := os.Create(CSVFILE)
+		if err != nil {
+			f.Close()
+			fmt.Println(err)
+			return
 		}
+		f.Close()
+	}
+
+	fileInfo, err := os.Stat(CSVFILE)
+	//Is it a regular file ?
+	mode := fileInfo.Mode()
+	if !mode.IsRegular() {
+		fmt.Println(CSVFILE, "not a regular file!")
+		return
+	}
+
+	err = readCsvFile(CSVFILE)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = createIndex()
+	if err != nil {
+		fmt.Println("Cannot create index.")
+		return
+	}
+
+}
+
+func createIndex() error {
+
+	for i, v := range myData {
+		index[v.Number] = i
 	}
 	return nil
 }
 
-func list() {
-	for _,v := range data {
-		fmt.Println(v)
+func readCsvFile(filepath string) error {
+	_, err := os.Stat(filepath)
+	if err != nil {
+		return err
 	}
+
+	f, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	lines, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		return err
+	}
+	for _, line := range lines {
+		temp := Entry{
+			Name:       line[0],
+			Surname:    line[1],
+			Number:     line[2],
+			LastAccess: line[3],
+		}
+		myData = append(myData, temp)
+	}
+	return nil
 }
 
-func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		exe := path.Base(arguments[0])
-		fmt.Printf("Usage: %s search|list <arguments>\n", exe)
-		return
+func saveCSVFile(filepath string) error {
+	csvFile, err := os.Create(filepath)
+	if err != nil {
+		return err
 	}
-	data = append(data, Entry{"Franc","Vander","60690"})
-	data = append(data, Entry{"Marta","Torin","62690"})
-	data = append(data, Entry{"Franc","Pujo","60690"})
-
-	switch arguments[1] {
-	case "search":
-		if len(arguments) != 3 {
-			fmt.Println("Usage: search surname")
-			return
-		}
-		result := search(arguments[2])
-		if result==nil {
-			fmt.Println("Entry not found:", arguments[2])
-			return
-		}
-		fmt.Println(*result)
-	case "list":
-		list()
-	default:
-		fmt.Println("Not a valid option")
+	defer csvFile.Close()
+	csvWriter := csv.NewWriter(csvFile)
+	csvWriter.Comma = '\t'
+	for _, row := range myData {
+		temp := []string{row.Name, row.Surname, row.Number}
+		_ = csvWriter.Write(temp)
 	}
+	csvWriter.Flush()
+	return nil
 }
